@@ -15,16 +15,11 @@ export async function onRequest(context) {
     const modifiedRequest = new Request(url.toString(), request);
 
     switch (modifiedRequest.method) {
-        case 'HEAD': return handleHead(modifiedRequest, env);
         case 'PROPFIND': return handlePropfind(modifiedRequest, env);
-        case 'PROPPATCH': return handleProppatch(modifiedRequest);
         case 'PUT': return handlePut(modifiedRequest, env);
         case 'DELETE': return handleDelete(modifiedRequest, env);
         case 'GET': return handleGet(modifiedRequest, env);
         case 'MKCOL': return new Response(null, { status: 201 });
-        case 'MOVE': return handleMove(modifiedRequest, env);
-        case 'LOCK': return handleLock(modifiedRequest);
-        case 'UNLOCK': return new Response(null, { status: 204 });
         default: return new Response('Method Not Allowed', { status: 405 });
     }
 }
@@ -81,31 +76,10 @@ function handleOptions(request) {
     return new Response(null, {
         status: 204,
         headers: {
-            'Allow': 'OPTIONS, HEAD, GET, PUT, DELETE, PROPFIND, PROPPATCH, MKCOL, MOVE, LOCK, UNLOCK',
+            'Allow': 'OPTIONS, GET, PUT, DELETE, PROPFIND, MKCOL',
             'DAV': '1, 2',
             'MS-Author-Via': 'DAV',
         },
-    });
-}
-
-async function handleHead(request, env) {
-    const path = decodeURIComponent(new URL(request.url).pathname);
-
-    if (path.endsWith('/')) {
-        return new Response(null, {
-            status: 200,
-            headers: {
-                'Content-Type': 'httpd/unix-directory',
-                'DAV': '1, 2',
-            },
-        });
-    }
-
-    const fileResponse = await fetch(new URL(`/file${path}`, request.url).toString());
-    return new Response(null, {
-        status: fileResponse.status,
-        statusText: fileResponse.statusText,
-        headers: fileResponse.headers,
     });
 }
 
@@ -234,38 +208,6 @@ async function handleDelete(request, env) {
     }
 }
 
-async function handleMove(request, env) {
-    const sourcePath = decodeURIComponent(new URL(request.url).pathname.substring(1));
-    const destination = request.headers.get('Destination');
-    if (!sourcePath || !destination) {
-        return new Response('Missing MOVE source or destination', { status: 400 });
-    }
-
-    const destinationPath = decodeURIComponent(new URL(destination).pathname)
-        .replace(/^\/dav\/?/, '')
-        .replace(/^\/+/, '');
-
-    if (!destinationPath || sourcePath.endsWith('/') || destinationPath.endsWith('/')) {
-        return new Response('Folder MOVE is not supported', { status: 409 });
-    }
-
-    const renameUrl = new URL(`/api/manage/rename/${sourcePath}`, request.url);
-    const response = await fetch(renameUrl.toString(), {
-        method: 'POST',
-        headers: {
-            ...(await getApiHeaders(env)),
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ newFileId: destinationPath }),
-    });
-
-    if (!response.ok) {
-        return new Response(await response.text(), { status: response.status });
-    }
-
-    return new Response(null, { status: 201 });
-}
-
 async function handlePropfind(request, env) {
     const path = decodeURIComponent(new URL(request.url).pathname);
     try {
@@ -277,25 +219,6 @@ async function handlePropfind(request, env) {
         console.error('Propfind failed:', error.stack);
         return new Response(`Failed to list files: ${error.message}`, { status: 500 });
     }
-}
-
-function handleProppatch(request) {
-    const path = decodeURIComponent(new URL(request.url).pathname);
-    const xml = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:"><D:response><D:href>${encodeURI(path)}</D:href><D:propstat><D:prop></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`;
-    return new Response(xml, { status: 207, headers: { 'Content-Type': 'application/xml; charset=utf-8' } });
-}
-
-function handleLock(request) {
-    const path = decodeURIComponent(new URL(request.url).pathname);
-    const token = `opaquelocktoken:${crypto.randomUUID()}`;
-    const xml = `<?xml version="1.0" encoding="utf-8"?><D:prop xmlns:D="DAV:"><D:lockdiscovery><D:activelock><D:locktype><D:write/></D:locktype><D:lockscope><D:exclusive/></D:lockscope><D:depth>Infinity</D:depth><D:owner></D:owner><D:timeout>Second-600</D:timeout><D:locktoken><D:href>${token}</D:href></D:locktoken><D:lockroot><D:href>${encodeURI(path)}</D:href></D:lockroot></D:activelock></D:lockdiscovery></D:prop>`;
-    return new Response(xml, {
-        status: 200,
-        headers: {
-            'Content-Type': 'application/xml; charset=utf-8',
-            'Lock-Token': `<${token}>`,
-        },
-    });
 }
 
 // --- API DATA FETCHING ---
