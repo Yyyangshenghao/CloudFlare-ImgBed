@@ -1,5 +1,5 @@
 // WebDAV 服务支持
-import { fetchSecurityConfig, fetchOthersConfig } from "../utils/sysConfig";
+import { fetchOthersConfig } from "../utils/sysConfig";
 
 export async function onRequest(context) {
     const { request, env } = context;
@@ -26,21 +26,14 @@ export async function onRequest(context) {
 // --- UTILITY FUNCTIONS ---
 
 async function getApiHeaders(env) {
-    const securityConfig = await fetchSecurityConfig(env);
-
-    const adminUsername = securityConfig.auth.admin.adminUsername;
-    const adminPassword = securityConfig.auth.admin.adminPassword;
-    const authCode = securityConfig.auth.user.authCode;
-
-    let credentials = btoa('unset:unset');
-
-    if (adminUsername && adminPassword) {
-        credentials = btoa(`${adminUsername}:${adminPassword}`);
+    const token = env.WEBDAV_API_TOKEN || '';
+    if (!token) {
+        console.error('WEBDAV_API_TOKEN is not configured');
+        return {};
     }
 
     return {
-        'Authorization': `Basic ${credentials}`,
-        'authCode': authCode || ''
+        'Authorization': token.startsWith('Bearer ') ? token : `Bearer ${token}`
     };
 }
 
