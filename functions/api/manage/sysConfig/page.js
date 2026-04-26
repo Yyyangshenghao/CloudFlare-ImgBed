@@ -168,6 +168,17 @@ export async function getPageConfig(db, env) {
             category_en: 'Client Settings',
         },
         {
+            id: 'sizeBasedUploadRouting',
+            label: '按大小自动分流',
+            label_en: 'Size-based Upload Routing',
+            type: 'boolean',
+            default: false,
+            tooltip: '开启后，普通上传会按文件大小选择渠道：小于20MB走Telegram，大于等于20MB走HuggingFace',
+            tooltip_en: 'When enabled, uploads are routed by file size: files under 20MB use Telegram, files 20MB or larger use HuggingFace',
+            category: '客户端设置',
+            category_en: 'Client Settings',
+        },
+        {
             id: 'defaultUploadFolder',
             label: '默认上传目录',
             label_en: 'Default Upload Directory',

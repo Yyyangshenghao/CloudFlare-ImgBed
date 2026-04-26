@@ -1,5 +1,5 @@
 import { userAuthCheck, UnauthorizedResponse } from "../utils/auth/userAuth";
-import { fetchUploadConfig, fetchSecurityConfig } from "../utils/sysConfig";
+import { fetchUploadConfig, fetchSecurityConfig, fetchPageConfig } from "../utils/sysConfig";
 import {
     createResponse, getUploadIp, getIPAddress, resolveFileExt,
     moderateContent, purgeCDNCache, isBlockedUploadIp, buildUniqueFileId, endUpload, getImageDimensions,
@@ -24,9 +24,11 @@ export async function onRequest(context) {  // Contents of context object
     // 读取各项配置，存入 context
     const securityConfig = await fetchSecurityConfig(env);
     const uploadConfig = await fetchUploadConfig(env, context);
+    const pageConfig = await fetchPageConfig(env);
 
     context.securityConfig = securityConfig;
     context.uploadConfig = uploadConfig;
+    context.pageConfig = pageConfig;
 
     // 鉴权
     const requiredPermission = 'upload';
@@ -134,6 +136,12 @@ async function processFileUpload(context, formdata = null) {
     const fileSizeBytes = file.size; // 文件大小，单位字节
     const fileSize = (fileSizeBytes / 1024 / 1024).toFixed(2); // 文件大小，单位MB
 
+    const sizeBasedUploadRouting = getPageConfigValue(context.pageConfig, 'sizeBasedUploadRouting', false);
+    if (sizeBasedUploadRouting && uploadChannel !== 'External') {
+        uploadChannel = fileSizeBytes >= SIZE_BASED_UPLOAD_THRESHOLD_BYTES ? 'HuggingFace' : 'TelegramNew';
+        console.log(`Size-based upload routing selected ${uploadChannel} for ${fileName} (${fileSize}MB)`);
+    }
+
     // 检查fileType和fileName是否存在
     if (fileType === null || fileType === undefined || fileName === null || fileName === undefined) {
         return createResponse('Error: fileType or fileName is wrong, check the integrity of this file!', { status: 400 });
@@ -198,7 +206,7 @@ async function processFileUpload(context, formdata = null) {
 
     /* ====================================不同渠道上传======================================= */
     // 出错是否切换渠道自动重试，默认开启
-    const autoRetry = url.searchParams.get('autoRetry') === 'false' ? false : true;
+    const autoRetry = sizeBasedUploadRouting ? false : (url.searchParams.get('autoRetry') === 'false' ? false : true);
 
     let err = '';
     // 上传到不同渠道
@@ -251,6 +259,21 @@ async function processFileUpload(context, formdata = null) {
     // 上传失败，开始自动切换渠道重试
     const res = await tryRetry(err, context, uploadChannel, fullId, metadata, fileExt, fileName, fileType, returnLink);
     return res;
+}
+
+const SIZE_BASED_UPLOAD_THRESHOLD_BYTES = 20 * 1024 * 1024;
+
+function getPageConfigValue(pageConfig, id, defaultValue) {
+    const item = pageConfig?.config?.find(config => config.id === id);
+    const rawValue = item?.value ?? item?.default ?? defaultValue;
+
+    if (typeof defaultValue === 'boolean') {
+        if (typeof rawValue === 'boolean') return rawValue;
+        if (typeof rawValue === 'string') return rawValue === 'true';
+        return defaultValue;
+    }
+
+    return rawValue ?? defaultValue;
 }
 
 // 上传到Cloudflare R2
