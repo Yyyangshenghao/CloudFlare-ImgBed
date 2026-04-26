@@ -4,6 +4,8 @@ import { fetchOthersConfig } from "../utils/sysConfig";
 export async function onRequest(context) {
     const { request, env } = context;
 
+    if (request.method === 'OPTIONS') return handleOptions(request);
+
     const authResponse = await checkAuth(request, env);
     if (authResponse) return authResponse;
 
@@ -13,7 +15,6 @@ export async function onRequest(context) {
     const modifiedRequest = new Request(url.toString(), request);
 
     switch (modifiedRequest.method) {
-        case 'OPTIONS': return handleOptions(modifiedRequest);
         case 'PROPFIND': return handlePropfind(modifiedRequest, env);
         case 'PUT': return handlePut(modifiedRequest, env);
         case 'DELETE': return handleDelete(modifiedRequest, env);
