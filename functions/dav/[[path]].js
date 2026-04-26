@@ -61,8 +61,7 @@ async function checkAuth(request, env) {
     }
 
     const [user, pass] = atob(encoded).split(':');
-    const normalizedUser = user.includes('\\') ? user.split('\\').pop() : user;
-    if (normalizedUser !== davUser || pass !== davPass) {
+    if (user !== davUser || pass !== davPass) {
         return new Response('Invalid credentials', { status: 403 });
     }
 
